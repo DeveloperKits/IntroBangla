@@ -2,12 +2,17 @@ package com.example.introbangla;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
 import com.example.introbangla.databinding.ActivityMainBinding;
+import com.google.android.material.snackbar.Snackbar;
 
 import java.util.List;
 import java.util.Random;
@@ -42,11 +47,30 @@ public class MainActivity extends AppCompatActivity {
                 .build();
 
         jsonCall = retrofit.create(JsonCall.class);
-        binding.button.setOnClickListener(view1 -> randomImage());
+
+        // after clicking button firstly check have internet then fetch image via API
+        binding.button.setOnClickListener(view1 -> {
+            if (IsNetworkAvailable()) {
+                randomImage();
+            }else {
+                snakeBar("No Internet. Check and try again...");
+            }
+        });
+
+        // load image if cache image are not null
+        SharedPreferences sharedPreferences = getSharedPreferences("Intro", MODE_PRIVATE);
+        String lastImageUrl = sharedPreferences.getString("lastImage", null);
+        if (lastImageUrl != null) {
+            Glide.with(MainActivity.this)
+                    .load(lastImageUrl)
+                    .placeholder(R.drawable.baseline_image_24)
+                    .into(binding.imageView);
+        }
     }
 
     private void randomImage() {
-        //Toast.makeText(MainActivity.this, "Un success", Toast.LENGTH_SHORT).show();
+        binding.progressBar.setVisibility(View.VISIBLE);
+
         Call<List<ImageModel>> call = jsonCall.fetchImage();
         call.enqueue(new Callback<List<ImageModel>>() {
             @Override
@@ -54,14 +78,17 @@ public class MainActivity extends AppCompatActivity {
                 if (response.isSuccessful()){
                     images = response.body();
                     addImage();
+                    binding.progressBar.setVisibility(View.GONE);
                 } else {
-                    Toast.makeText(MainActivity.this, "Un success", Toast.LENGTH_SHORT).show();
+                    binding.progressBar.setVisibility(View.GONE);
+                    snakeBar("Failed! try again.");
                 }
             }
 
             @Override
             public void onFailure(Call<List<ImageModel>> call, Throwable t) {
-                Toast.makeText(MainActivity.this, "Failed", Toast.LENGTH_SHORT).show();
+                binding.progressBar.setVisibility(View.GONE);
+                snakeBar("Failed! try again.");
             }
         });
     }
@@ -73,8 +100,27 @@ public class MainActivity extends AppCompatActivity {
                     .load(image.getDownloadUrl())
                     .placeholder(R.drawable.baseline_image_24)
                     .into(binding.imageView);
+
+            SharedPreferences sharedPreferences = getSharedPreferences("Intro", MODE_PRIVATE);
+            SharedPreferences.Editor editor = sharedPreferences.edit();
+            editor.putString("lastImage", image.getDownloadUrl());
+            editor.apply();
         } else {
             randomImage();
         }
     }
+
+    private void snakeBar(String string) {
+        Snackbar
+                .make(binding.wrapContent, string, Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(getResources().getColor(android.R.color.holo_red_light))
+                .show();
+    }
+
+    private boolean IsNetworkAvailable(){
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo netInfo = cm.getActiveNetworkInfo();
+        return netInfo != null && netInfo.isConnectedOrConnecting();
+    }
+
 }
